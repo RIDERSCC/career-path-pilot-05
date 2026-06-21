@@ -192,7 +192,7 @@ function Hero({ onCtaClick }: { onCtaClick: () => void }) {
             <span className="bg-[var(--gradient-primary)] bg-clip-text text-transparent">AI</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground sm:text-lg">
-            Upload your resume and discover your best career opportunities instantly. Get matched roles, skill gaps, tailored cover letters, and interview prep — in one place.
+            Upload your resume and discover AI-powered career opportunities instantly. Get matched roles, skill gaps, tailored cover letters, and interview prep — in one place.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button
