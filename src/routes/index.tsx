@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
+import { extractTextFromPDF } from "../utils/pdfExtractor";
+import { useEffect } from "react";
 import {
   Sparkles,
   UploadCloud,
@@ -30,7 +32,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
@@ -57,19 +58,76 @@ function Dashboard() {
   const [file, setFile] = useState<File | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
   const analysisRef = useRef<HTMLDivElement | null>(null);
 
-  const handleAnalyze = useCallback(() => {
-    if (!file) return;
+  const handleAnalyze = useCallback(async () => {
+  if (!file) {
+    alert("Please upload a resume.");
+    return;
+  }
+
+  try {
     setAnalyzing(true);
-    setTimeout(() => {
-      setAnalyzing(false);
-      setAnalyzed(true);
-      requestAnimationFrame(() => {
-        analysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    // Extract text from PDF
+    const resumeText = await extractTextFromPDF(file);
+
+    console.log("Extracted Resume Text:");
+    console.log(resumeText);
+
+    // Send to n8n
+    const response = await fetch(
+      "http://localhost:5678/webhook-test/resume-analysis",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resumeText,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to analyze resume");
+    }
+
+    const responseData = await response.json();
+
+    console.log(responseData);
+
+    // Merge AI analysis + real jobs
+    const result = {
+      ...responseData.analysis,
+      recommended_jobs: responseData.recommended_jobs,
+    };
+
+    setAnalysis(result);
+
+    console.log(result);
+
+    console.log("Gemini Response:");
+    
+
+    // We'll connect this data to UI next
+    setAnalyzed(true);
+
+    requestAnimationFrame(() => {
+      analysisRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
       });
-    }, 1400);
-  }, [file]);
+    });
+
+  } catch (err) {
+    console.error(err);
+    alert("Resume analysis failed.");
+  } finally {
+    setAnalyzing(false);
+  }
+}, [file]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -103,7 +161,7 @@ function Dashboard() {
               description="What we extracted from your resume in seconds."
               icon={<Sparkles className="h-4 w-4" />}
             />
-            <ResumeAnalysis />
+            <ResumeAnalysis data={analysis} />
 
             <SectionHeading
               eyebrow="Step 03"
@@ -111,7 +169,7 @@ function Dashboard() {
               description="Roles ranked by how well they fit your profile."
               icon={<Briefcase className="h-4 w-4" />}
             />
-            <RecommendedJobs />
+            <RecommendedJobs data={analysis} />
 
             <SectionHeading
               eyebrow="Step 04"
@@ -119,7 +177,7 @@ function Dashboard() {
               description="Close the distance between you and your next role."
               icon={<Target className="h-4 w-4" />}
             />
-            <SkillGap />
+            <SkillGap data={analysis} />
 
             <SectionHeading
               eyebrow="Step 05"
@@ -127,7 +185,7 @@ function Dashboard() {
               description="A tailored draft you can edit and send."
               icon={<MessageSquare className="h-4 w-4" />}
             />
-            <CoverLetter />
+            <CoverLetter data={analysis} />
 
             <SectionHeading
               eyebrow="Step 06"
@@ -135,7 +193,7 @@ function Dashboard() {
               description="Practice questions calibrated to your target roles."
               icon={<Mic className="h-4 w-4" />}
             />
-            <InterviewPrep />
+            <InterviewPrep data={analysis} />
           </>
         )}
       </main>
@@ -163,12 +221,6 @@ function TopNav() {
           <a href="#skills" className="hover:text-foreground">Skills</a>
           <a href="#interview" className="hover:text-foreground">Interview</a>
         </nav>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">Sign in</Button>
-          <Button size="sm" className="bg-[var(--gradient-primary)] text-primary-foreground hover:opacity-90">
-            Get started
-          </Button>
-        </div>
       </div>
     </header>
   );
@@ -206,11 +258,6 @@ function Hero({ onCtaClick }: { onCtaClick: () => void }) {
             <Button size="lg" variant="outline">
               See how it works
             </Button>
-          </div>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-xs text-muted-foreground">
-            <Stat label="Resumes analyzed" value="124k+" />
-            <Stat label="Avg. match score" value="91%" />
-            <Stat label="Hiring partners" value="3,200" />
           </div>
         </div>
       </div>
@@ -362,56 +409,30 @@ function ResumeUploadCard({
 
 function JobPreferencesCard() {
   return (
-    <Card className="h-full border-border/70 shadow-[var(--shadow-soft)]">
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-accent-foreground">
-            <Globe2 className="h-4 w-4" />
-          </div>
-          <div>
-            <CardTitle className="text-base">Job preferences</CardTitle>
-            <CardDescription>Where do you want to work?</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Country">
-            <Select defaultValue="us">
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="us">United States</SelectItem>
-                <SelectItem value="ca">Canada</SelectItem>
-                <SelectItem value="uk">United Kingdom</SelectItem>
-                <SelectItem value="de">Germany</SelectItem>
-                <SelectItem value="in">India</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="State / Region">
-            <Select defaultValue="ca-state">
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ca-state">California</SelectItem>
-                <SelectItem value="ny">New York</SelectItem>
-                <SelectItem value="wa">Washington</SelectItem>
-                <SelectItem value="tx">Texas</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-        <Field label="City">
-          <Input placeholder="e.g. San Francisco" defaultValue="San Francisco" />
-        </Field>
-        <Field label="Work type">
-          <div className="grid grid-cols-3 gap-2">
-            {(["Remote", "Hybrid", "Onsite"] as const).map((t, i) => (
-              <WorkTypeChip key={t} label={t} defaultActive={i === 0} />
-            ))}
-          </div>
-        </Field>
-      </CardContent>
-    </Card>
+    <Card className="border-border/70 shadow-[var(--shadow-soft)]">
+  <CardHeader>
+    <CardTitle>Job Search</CardTitle>
+
+    <CardDescription>
+      Personalized recommendations powered by AI
+    </CardDescription>
+  </CardHeader>
+
+  <CardContent>
+    <div className="rounded-xl bg-primary/5 border border-primary/20 p-5 text-center">
+
+      <h3 className="font-semibold text-lg">
+         Searching jobs across India
+      </h3>
+
+      <p className="mt-2 text-sm text-muted-foreground">
+        CareerPilot AI matches your resume with the latest opportunities
+        across India and recommends the best-fit roles automatically.
+      </p>
+
+    </div>
+  </CardContent>
+</Card>
   );
 }
 
@@ -485,8 +506,13 @@ function EmptyAnalysisState() {
   );
 }
 
-function ResumeAnalysis() {
-  const a = mockResumeAnalysis;
+function ResumeAnalysis({ data }: { data: any }) {
+  const a = {
+  currentRole: data?.current_role || "Not Available",
+  yearsExperience: data?.experience_years || 0,
+  topSkills: data?.skills || [],
+  preferredRoles: data?.preferred_roles || [],
+  };
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
@@ -543,7 +569,8 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-function RecommendedJobs() {
+function RecommendedJobs({ data }: { data: any }) {
+  const jobs = data?.recommended_jobs || [];
   return (
     <Card id="jobs" className="overflow-hidden border-border/70 shadow-[var(--shadow-soft)]">
       <div className="hidden grid-cols-12 gap-4 border-b border-border bg-muted/40 px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:grid">
@@ -554,9 +581,9 @@ function RecommendedJobs() {
         <div className="col-span-1 text-right">Action</div>
       </div>
       <ul className="divide-y divide-border">
-        {mockJobs.map((job) => (
+        {jobs.map((job: any, index: number) => (
           <li
-            key={job.id}
+            key={index}
             className="grid grid-cols-1 gap-3 px-5 py-4 transition-colors hover:bg-muted/30 md:grid-cols-12 md:items-center md:gap-4"
           >
             <div className="md:col-span-4">
@@ -564,9 +591,11 @@ function RecommendedJobs() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">{job.title}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {job.tags.map((t) => (
-                      <Badge key={t} variant="outline" className="rounded-md text-[10px] font-medium">{t}</Badge>
-                    ))}
+                    {job.reason && (
+                      <Badge variant="secondary" className="rounded-md">
+                        {job.reason}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </div>
@@ -577,17 +606,27 @@ function RecommendedJobs() {
                 {job.company}
               </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" /> {job.location} · {job.workType}
+                <MapPin className="h-3 w-3" /> {job.location}
               </div>
             </div>
-            <div className="text-sm font-medium text-foreground md:col-span-2">{job.salary}</div>
+            <div className="text-sm font-medium text-foreground md:col-span-2">Not Available</div>
             <div className="md:col-span-2">
-              <MatchScore score={job.match} />
+              <MatchScore score={job.match_score} />
             </div>
             <div className="md:col-span-1 md:text-right">
-              <Button size="sm" className="bg-[var(--gradient-primary)] text-primary-foreground hover:opacity-95">
+              <Button
+              size="sm"
+              className="bg-[var(--gradient-primary)] text-primary-foreground hover:opacity-95"
+              asChild
+            >
+              <a
+                href={job.apply_link}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Apply
-              </Button>
+              </a>
+            </Button>
             </div>
           </li>
         ))}
@@ -614,8 +653,11 @@ function MatchScore({ score }: { score: number }) {
   );
 }
 
-function SkillGap() {
-  const g = mockSkillGaps;
+function SkillGap({ data }: { data: any }) {
+  const gap = data?.skill_gap || {
+  missing_skills: [],
+  recommended_courses: [],
+};
   return (
     <div id="skills" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card className="border-border/70 shadow-[var(--shadow-soft)]">
@@ -629,7 +671,7 @@ function SkillGap() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-1.5">
-            {g.missing.map((s) => (
+            {gap.missing_skills.map((s: string) => (
               <Badge key={s} className="rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20">
                 {s}
               </Badge>
@@ -649,7 +691,7 @@ function SkillGap() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-1.5">
-            {g.recommended.map((s) => (
+            {gap.recommended_courses.map((s: string) => (
               <Badge key={s} className="rounded-md bg-success/10 text-success hover:bg-success/20">
                 {s}
               </Badge>
@@ -667,35 +709,22 @@ function SkillGap() {
             <CardTitle className="text-base">Learning priority</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {g.priority.map((p) => (
-            <div key={p.skill}>
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground">{p.skill}</span>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "rounded-md text-[10px]",
-                    p.tag === "High" && "border-destructive/30 text-destructive",
-                    p.tag === "Medium" && "border-warning/40 text-warning",
-                    p.tag === "Low" && "border-border text-muted-foreground",
-                  )}
-                >
-                  {p.tag}
-                </Badge>
-              </div>
-              <Progress value={p.level} className="mt-1.5 h-1.5" />
-            </div>
-          ))}
-        </CardContent>
+        <CardContent>
+  <p className="text-sm text-muted-foreground">
+    Learning priorities will be generated in the next version.
+  </p>
+</CardContent>
       </Card>
     </div>
   );
 }
 
-function CoverLetter() {
+function CoverLetter({ data }: { data: any }) {
   const [copied, setCopied] = useState(false);
-  const [value, setValue] = useState(mockCoverLetter);
+  const [value, setValue] = useState(data?.cover_letter || "");
+  useEffect(() => {
+  setValue(data?.cover_letter || "");
+}, [data]);
   const copy = () => {
     navigator.clipboard.writeText(value);
     setCopied(true);
@@ -724,26 +753,23 @@ function CoverLetter() {
   );
 }
 
-function InterviewPrep() {
+function InterviewPrep({ data }: { data: any }) {
+  const questions = data?.interview_questions || [];
+
   return (
-    <Card id="interview" className="border-border/70 shadow-[var(--shadow-soft)]">
+    <Card
+      id="interview"
+      className="border-border/70 shadow-[var(--shadow-soft)]"
+    >
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Practice questions</CardTitle>
-        <CardDescription>Switch between technical and behavioral rounds.</CardDescription>
+        <CardTitle className="text-base">Interview Preparation</CardTitle>
+        <CardDescription>
+          AI-generated interview questions based on your resume.
+        </CardDescription>
       </CardHeader>
+
       <CardContent>
-        <Tabs defaultValue="technical">
-          <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:inline-grid">
-            <TabsTrigger value="technical">Technical</TabsTrigger>
-            <TabsTrigger value="behavioral">Behavioral</TabsTrigger>
-          </TabsList>
-          <TabsContent value="technical" className="mt-4">
-            <QuestionList items={mockInterview.technical} />
-          </TabsContent>
-          <TabsContent value="behavioral" className="mt-4">
-            <QuestionList items={mockInterview.behavioral} />
-          </TabsContent>
-        </Tabs>
+        <QuestionList items={questions} />
       </CardContent>
     </Card>
   );
