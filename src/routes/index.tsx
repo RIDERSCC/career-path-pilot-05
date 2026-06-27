@@ -78,17 +78,17 @@ function Dashboard() {
 
     // Send to n8n
     const response = await fetch(
-      "http://localhost:5678/webhook-test/resume-analysis",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          resumeText,
-        }),
-      }
-    );
+    import.meta.env.VITE_API_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        resumeText,
+      }),
+    }
+  );
 
     if (!response.ok) {
       throw new Error("Failed to analyze resume");
