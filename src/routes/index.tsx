@@ -508,10 +508,10 @@ function EmptyAnalysisState() {
 
 function ResumeAnalysis({ data }: { data: any }) {
   const a = {
-  currentRole: data?.current_role || "Not Available",
-  yearsExperience: data?.experience_years || 0,
-  topSkills: data?.skills || [],
-  preferredRoles: data?.preferred_roles || [],
+    currentRole: (data?.current_role as string) || "Not Available",
+    yearsExperience: (data?.experience_years as number) || 0,
+    topSkills: (data?.skills as string[]) || [],
+    preferredRoles: (data?.preferred_roles as string[]) || [],
   };
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
