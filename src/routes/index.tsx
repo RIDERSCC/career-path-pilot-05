@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { extractTextFromPDF } from "../utils/pdfExtractor";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import {
   Sparkles,
   UploadCloud,
@@ -60,6 +61,18 @@ function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const analysisRef = useRef<HTMLDivElement | null>(null);
+  const [loadingStep, setLoadingStep] = useState(0);
+
+
+    const loadingSteps = [
+    "📄 Reading your resume...",
+    "🧠 Analyzing your skills and experience...",
+    "🔍 Searching live jobs across India...",
+    "📊 Identifying skill gaps...",
+    "✍️ Preparing your cover letter...",
+    "🎯 Generating interview questions...",
+    "✅ Finalizing your personalized career report..."
+  ];
 
   const handleAnalyze = useCallback(async () => {
   if (!file) {
@@ -110,7 +123,7 @@ function Dashboard() {
 
     console.log("Gemini Response:");
     
-
+    toast.success("🎉 Career report is ready!");
     // We'll connect this data to UI next
     setAnalyzed(true);
 
@@ -123,11 +136,30 @@ function Dashboard() {
 
   } catch (err) {
     console.error(err);
-    alert("Resume analysis failed.");
+    toast.error("Resume analysis failed.");
   } finally {
     setAnalyzing(false);
   }
 }, [file]);
+
+useEffect(() => {
+  if (!analyzing) {
+    setLoadingStep(0);
+    return;
+  }
+
+  let current = 0;
+
+  const interval = setInterval(() => {
+    current++;
+
+    if (current < loadingSteps.length) {
+      setLoadingStep(current);
+    }
+  }, 2500);
+
+  return () => clearInterval(interval);
+}, [analyzing]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -148,6 +180,29 @@ function Dashboard() {
             <JobPreferencesCard />
           </div>
         </section>
+
+            {analyzing && (
+            <Card className="mt-8 border-primary/20 bg-primary/5 shadow-lg">
+              <CardContent className="py-10 flex flex-col items-center gap-6">
+
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+
+                <h2 className="text-xl font-semibold">
+                  CareerPilot AI is working...
+                </h2>
+
+                <p className="text-lg font-medium text-primary text-center transition-all duration-500">
+                  {loadingSteps[loadingStep]}
+                </p>
+
+                <p className="text-sm text-muted-foreground text-center max-w-xl">
+                  This usually takes around <strong>20–30 seconds</strong>.
+                  Please keep this page open while we analyze your resume and prepare your personalized career report.
+                </p>
+
+              </CardContent>
+            </Card>
+          )}
 
         <div ref={analysisRef} className="scroll-mt-24" />
 
@@ -254,9 +309,6 @@ function Hero({ onCtaClick }: { onCtaClick: () => void }) {
             >
               Analyze Resume
               <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-            <Button size="lg" variant="outline">
-              See how it works
             </Button>
           </div>
         </div>
